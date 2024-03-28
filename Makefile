@@ -1,5 +1,5 @@
 build:
-	go build -i
+	go build -o ./bin/asciinema-edit -ldflags "-s -w" ./cmd/main.go
 
 fmt:
 	go fmt ./...

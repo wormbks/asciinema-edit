@@ -1,8 +1,8 @@
-<h1 align="center">asciinema-edit 🎬 </h1>
+# asciinema-edit
 
-<h5 align="center">Auxiliary tools for dealing with ASCIINEMA casts</h5>
+**Auxiliary tools for dealing with ASCIINEMA casts**
 
-<br/>
+
 
 `asciinema-edit` is a tool who's purpose is to post-process asciinema casts (V2), either from [asciinema](https://github.com/asciinema/asciinema) itself or [termtosvg](https://github.com/nbedos/termtosvg).
 
@@ -22,18 +22,8 @@ Having those, you can improve your cast by:
 - reducing delays between commands; and
 - completely removing parts that don't add value to the cast.
 
-### Installation
 
-Being a Golang application, you can either build it yourself with `go get` or fetch a specific version from the [Releases page](https://github.com/cirocosta/asciinema-edit/releases):
-
-```sh
-#Using `go`, fetch the latest from `master`
-go get -u -v github.com/cirocosta/asciinema-edit
-
-#Retrieving from GitHub releases
-VERSION=0.0.6
-curl -SOL https://github.com/cirocosta/asciinema-edit/releases/download/$VERSION/asciinema-edit_$VERSION_linux_amd64.tar.gz
-```
+## Usage
 
 ### Quantize
 

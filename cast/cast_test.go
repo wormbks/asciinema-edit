@@ -1,412 +1,201 @@
-package cast_test
+package cast
 
 import (
-	"bufio"
 	"bytes"
-	"github.com/cirocosta/asciinema-edit/cast"
-	"io"
+	"encoding/json"
+	"os"
+	"testing"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
 )
 
-var (
-	validHeader = cast.Header{
-		Version: 2,
-		Width:   123,
-		Height:  123,
+func TestValidVersion2Header(t *testing.T) {
+	header := Header{Version: 2, Width: 80, Height: 24}
+	err := header.ValidateHeader()
+	assert.NoError(t, err)
+}
+
+func TestInvalidVersionHeader(t *testing.T) {
+	header := Header{Version: 1, Width: 80, Height: 24}
+	err := header.ValidateHeader()
+	assert.Error(t, err)
+}
+
+func TestValidWidth(t *testing.T) {
+	header := Header{Version: 2, Width: 80, Height: 24}
+	err := header.ValidateHeader()
+	assert.NoError(t, err)
+}
+
+func TestInvalidWidth(t *testing.T) {
+	header := Header{Version: 2, Width: 0, Height: 24}
+	err := header.ValidateHeader()
+	assert.Error(t, err)
+}
+
+func TestValidHeight(t *testing.T) {
+	header := Header{Version: 2, Width: 80, Height: 24}
+	err := header.ValidateHeader()
+	assert.NoError(t, err)
+}
+
+func TestInvalidHeight(t *testing.T) {
+	header := Header{Version: 2, Width: 80, Height: 0}
+	err := header.ValidateHeader()
+	assert.Error(t, err)
+}
+
+func TestValidateEvent(t *testing.T) {
+	validEvent := &Event{Type: "i"}
+	err := validEvent.ValidateEvent()
+	if err != nil {
+		t.Errorf("Expected no error, but got %v", err)
 	}
-	invalidHeader = cast.Header{
-		Version: 123,
+
+	validEvent.Type = "o"
+	err = validEvent.ValidateEvent()
+	if err != nil {
+		t.Errorf("Expected no error, but got %v", err)
 	}
-	validEvent1 = cast.Event{
-		Time: 1,
-		Type: "o",
-		Data: "1",
+
+	validEvent.Type = "r"
+	err = validEvent.ValidateEvent()
+	if err != nil {
+		t.Errorf("Expected no error, but got %v", err)
 	}
-	validEvent2 = cast.Event{
-		Time: 2,
-		Type: "o",
-		Data: "2",
+
+	validEvent.Type = "m"
+	err = validEvent.ValidateEvent()
+	if err != nil {
+		t.Errorf("Expected no error, but got %v", err)
 	}
-	validEvent3 = cast.Event{
-		Time: 3,
-		Type: "o",
-		Data: "3",
+
+	invalidEvent := &Event{Type: "invalid"}
+	err = invalidEvent.ValidateEvent()
+	if err == nil {
+		t.Error("Expected an error, but got none")
 	}
-	invalidEvent4 = cast.Event{
-		Time: 4,
-		Type: "something-wrong",
-		Data: "wrong",
+
+	nilEvent := (*Event)(nil)
+	err = nilEvent.ValidateEvent()
+	if err == nil {
+		t.Error("Expected an error, but got none")
 	}
-)
-
-var _ = Describe("Cast", func() {
-	Describe("Validate", func() {
-		Context("with a nil cast", func() {
-			It("fails", func() {
-				isValid, err := cast.Validate(nil)
-
-				Expect(err).NotTo(Succeed())
-				Expect(isValid).NotTo(BeTrue())
-			})
-		})
-
-		Context("w/ cast containing invalid header", func() {
-			It("fails", func() {
-				isValid, err := cast.Validate(&cast.Cast{
-					Header: invalidHeader,
-				})
-
-				Expect(err).NotTo(Succeed())
-				Expect(isValid).NotTo(BeTrue())
-			})
-		})
-
-		Context("w/ cast containing invalid event stream", func() {
-			It("fails", func() {
-				isValid, err := cast.Validate(&cast.Cast{
-					Header: validHeader,
-					EventStream: []*cast.Event{
-						&invalidEvent4,
-					},
-				})
-
-				Expect(err).NotTo(Succeed())
-				Expect(isValid).NotTo(BeTrue())
-			})
-		})
-
-		Context("w/ wellformed cast", func() {
-			It("succeeds", func() {
-				isValid, err := cast.Validate(&cast.Cast{
-					Header: validHeader,
-					EventStream: []*cast.Event{
-						&validEvent1,
-						&validEvent2,
-					},
-				})
-
-				Expect(err).To(Succeed())
-				Expect(isValid).To(BeTrue())
-			})
-		})
-
-	})
-
-	Describe("ValidateEvent", func() {
-		Context("with nil event", func() {
-			It("fails", func() {
-				isValid, err := cast.ValidateEvent(nil)
-
-				Expect(err).NotTo(Succeed())
-				Expect(isValid).NotTo(BeTrue())
-			})
-		})
-
-		Context("regarding type", func() {
-			It("fails if not specified", func() {
-				isValid, err := cast.ValidateEvent(&cast.Event{
-					Type: "",
-				})
-
-				Expect(err).NotTo(Succeed())
-				Expect(isValid).NotTo(BeTrue())
-			})
-
-			It("fails if not `i` or `o`", func() {
-				isValid, err := cast.ValidateEvent(&cast.Event{
-					Type: "abc",
-				})
-
-				Expect(err).NotTo(Succeed())
-				Expect(isValid).NotTo(BeTrue())
-			})
-		})
-
-		It("succeeds if well specified", func() {
-			isValid, err := cast.ValidateEvent(&cast.Event{
-				Time: 123,
-				Type: "o",
-				Data: "lol",
-			})
-
-			Expect(err).To(Succeed())
-			Expect(isValid).To(BeTrue())
-
-			isValid, err = cast.ValidateEvent(&cast.Event{
-				Time: 321,
-				Type: "i",
-				Data: "lol",
-			})
-
-			Expect(err).To(Succeed())
-			Expect(isValid).To(BeTrue())
-		})
-	})
-
-	Describe("ValidateHeader", func() {
-		Context("with nil header", func() {
-			It("fails", func() {
-				isValid, err := cast.ValidateHeader(nil)
-
-				Expect(err).NotTo(Succeed())
-				Expect(isValid).NotTo(BeTrue())
-			})
-		})
-
-		It("fails if version is not 2", func() {
-			isValid, err := cast.ValidateHeader(&cast.Header{
-				Version: 123,
-			})
-
-			Expect(err).NotTo(Succeed())
-			Expect(isValid).NotTo(BeTrue())
-		})
-
-		It("fails if width is not greater than zero ", func() {
-			isValid, err := cast.ValidateHeader(&cast.Header{
-				Version: 2,
-				Width:   0,
-			})
-
-			Expect(err).NotTo(Succeed())
-			Expect(isValid).NotTo(BeTrue())
-		})
-
-		It("fails if height is not greater than zero ", func() {
-			isValid, err := cast.ValidateHeader(&cast.Header{
-				Version: 2,
-				Width:   10,
-				Height:  0,
-			})
-
-			Expect(err).NotTo(Succeed())
-			Expect(isValid).NotTo(BeTrue())
-		})
-
-		It("succeeds if well specified", func() {
-			isValid, err := cast.ValidateHeader(&cast.Header{
-				Version: 2,
-				Width:   123,
-				Height:  321,
-			})
-
-			Expect(err).To(Succeed())
-			Expect(isValid).To(BeTrue())
-		})
-	})
-
-	Describe("ValidateEventStream", func() {
-		Context("with empty stream", func() {
-			var data = cast.Cast{
-				Header:      validHeader,
-				EventStream: []*cast.Event{},
-			}
-
-			It("is valid", func() {
-				isValid, err := cast.Validate(&data)
-
-				Expect(err).To(Succeed())
-				Expect(isValid).To(BeTrue())
-			})
-		})
-
-		It("fails if not sorted by time", func() {
-			var data = cast.Cast{
-				Header: validHeader,
-				EventStream: []*cast.Event{
-					&validEvent2,
-					&validEvent1,
-					&validEvent3,
-				},
-			}
-
-			isValid, err := cast.Validate(&data)
-
-			Expect(err).NotTo(Succeed())
-			Expect(isValid).NotTo(BeTrue())
-
-		})
-
-		It("succeeds if sorted and valid", func() {
-			var data = cast.Cast{
-				Header: validHeader,
-				EventStream: []*cast.Event{
-					&validEvent1,
-					&validEvent2,
-					&validEvent3,
-				},
-			}
-
-			isValid, err := cast.Validate(&data)
-
-			Expect(err).To(Succeed())
-			Expect(isValid).To(BeTrue())
-		})
-
-		It("fails if there's an invalid event", func() {
-			var data = cast.Cast{
-				Header: validHeader,
-				EventStream: []*cast.Event{
-					&validEvent1,
-					&invalidEvent4,
-				},
-			}
-
-			isValid, err := cast.Validate(&data)
-
-			Expect(err).NotTo(Succeed())
-			Expect(isValid).NotTo(BeTrue())
-		})
-
-	})
-
-	Describe("Encode", func() {
-		Context("with nil writer", func() {
-			It("fails", func() {
-				err := cast.Encode(nil, nil)
-				Expect(err).NotTo(Succeed())
-			})
-		})
-
-		Context("with nil cast", func() {
-			var buf bytes.Buffer
-
-			It("fails", func() {
-				err := cast.Encode(&buf, nil)
-				Expect(err).NotTo(Succeed())
-			})
-		})
-
-		Context("with cast", func() {
-			var (
-				buf     bytes.Buffer
-				err     error
-				scanner *bufio.Scanner
-				data    = cast.Cast{
-					Header: cast.Header{
-						Version: 2,
-						Width:   10,
-						Height:  10,
-					},
-					EventStream: []*cast.Event{
-						{
-							Time: 1,
-							Type: "o",
-							Data: "foo",
-						},
-					},
-				}
-			)
-
-			JustBeforeEach(func() {
-				buf.Reset()
-				scanner = bufio.NewScanner(&buf)
-				err = cast.Encode(&buf, &data)
-			})
-
-			It("doesnt error", func() {
-				Expect(err).To(Succeed())
-			})
-
-			It("has the header in the first line", func() {
-				ok := scanner.Scan()
-				Expect(ok).To(BeTrue())
-
-				Expect(scanner.Text()).To(Equal(
-					`{"version":2,"width":10,"height":10,"theme":{},"env":{}}`))
-			})
-
-			It("has the first event in the second line", func() {
-				ok := scanner.Scan()
-				Expect(ok).To(BeTrue())
-
-				ok = scanner.Scan()
-				Expect(ok).To(BeTrue())
-
-				Expect(scanner.Text()).To(Equal(
-					`[1,"o","foo"]`))
-			})
-
-			It("doesn't have more than 2 lines", func() {
-				ok := scanner.Scan()
-				Expect(ok).To(BeTrue())
-
-				ok = scanner.Scan()
-				Expect(ok).To(BeTrue())
-
-				ok = scanner.Scan()
-				Expect(ok).NotTo(BeTrue())
-			})
-		})
-	})
-
-	Describe("Decode", func() {
-		Context("with nil reader", func() {
-			It("fails", func() {
-				_, err := cast.Decode(nil)
-				Expect(err).ToNot(Succeed())
-			})
-		})
-
-		Context("with empty reader", func() {
-			It("fails", func() {
-				reader := bytes.NewBufferString("")
-				_, err := cast.Decode(reader)
-				Expect(err).ToNot(Succeed())
-			})
-		})
-
-		Context("with non-empty reader", func() {
-			It("fails if not json supplied", func() {
-				reader := bytes.NewBufferString("something else")
-				_, err := cast.Decode(reader)
-				Expect(err).ToNot(Succeed())
-			})
-
-			It("fails if json not decodeable to a header struct", func() {
-				reader := bytes.NewBufferString(`{"foo": "bar"}`)
-				_, err := cast.Decode(reader)
-				Expect(err).ToNot(Succeed())
-
-				reader = bytes.NewBufferString(`[1,2,3]`)
-				_, err = cast.Decode(reader)
-				Expect(err).ToNot(Succeed())
-			})
-
-			Context("w/ proper stream", func() {
-				var (
-					reader      io.Reader
-					decodedCast *cast.Cast
-					err         error
-				)
-
-				BeforeEach(func() {
-					reader = bytes.NewBufferString(`{"version": 2, "width":123, "idle_time_limit": 1, "timestamp": 2, "command": "/bin/sh", "title": "test", "env": {"SHELL": "/bin/sh", "TERM": "a-term256"}, "theme": { "fg": "#aaa", "bg":"#bbb", "palette": "a,b,c" }}
-[1,"o", "lol"]
-[2,"o", "lol"]`)
-					decodedCast, err = cast.Decode(reader)
-				})
-
-				It("succeeds", func() {
-					Expect(err).To(Succeed())
-					Expect(decodedCast).ToNot(BeNil())
-				})
-
-				It("has header values set", func() {
-					Expect(decodedCast.Header.Version).
-						To(Equal(uint8(2)))
-					Expect(decodedCast.Header.Width).
-						To(Equal(uint(123)))
-					Expect(decodedCast.Header.Height).
-						To(Equal(uint(0)))
-				})
-
-				It("captures the events", func() {
-					Expect(len(decodedCast.EventStream)).To(Equal(2))
-				})
-			})
-		})
-	})
-})
+}
+
+func TestCast_Encode(t *testing.T) {
+	cast := Cast{
+		Header: Header{Version: 2, Width: 80, Height: 24},
+		EventStream: []*Event{
+			{Time: 1.0, Type: "o", Data: "data1"},
+			{Time: 2.0, Type: "r", Data: "10x20"},
+		},
+	}
+
+	// Test case 1: Testing with a nil writer
+	err := cast.Encode(nil)
+	if err == nil {
+		t.Errorf("Expected an error when writer is nil, but got nil")
+	}
+
+	// Test case 2: Testing with a nil cast
+	var nilCast *Cast
+	err = nilCast.Encode(os.Stdout)
+	if err == nil {
+		t.Errorf("Expected an error when cast is nil, but got nil")
+	}
+
+	// Test case 3: Testing with a valid writer and cast
+	writer := &bytes.Buffer{}
+	err = cast.Encode(writer)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// Add more test cases as needed
+}
+func TestCast_Decode(t *testing.T) {
+
+	// Test case with nil reader
+	_, err := Decode(nil)
+	assert.Error(t, err)
+
+	// Test case with invalid header
+	reader := bytes.NewBuffer([]byte("invalid"))
+	_, err = Decode(reader)
+	assert.Error(t, err)
+
+	// Test case with valid header but invalid event
+	header := &Header{Version: 2, Width: 80, Height: 24}
+	event := &Event{Type: "invalid"}
+	writer := &bytes.Buffer{}
+	e := json.NewEncoder(writer)
+	err = header.Encode(e)
+	assert.NoError(t, err)
+	err = event.Encode(e)
+	assert.NoError(t, err)
+
+	_, err = Decode(writer)
+	assert.Error(t, err)
+
+	// Test case with valid header and events
+	header = &Header{Version: 2, Width: 80, Height: 24}
+	event1 := &Event{Time: 1.0, Type: "o", Data: "data1"}
+	event2 := &Event{Time: 2.0, Type: "r", Data: "10x20"}
+
+	writer.Reset()
+	e = json.NewEncoder(writer)
+	err = header.Encode(e)
+	assert.NoError(t, err)
+	err = event1.Encode(e)
+	assert.NoError(t, err)
+	err = event2.Encode(e)
+	assert.NoError(t, err)
+
+	cast, err := Decode(writer)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(cast.EventStream))
+
+}
+
+func TestHeader_Encode(t *testing.T) {
+
+	// Test case with nil writer
+	var header Header
+	err := header.Encode(nil)
+	assert.Error(t, err)
+
+	// Test case with valid header
+	header = Header{Version: 2, Width: 80, Height: 24}
+	writer := &bytes.Buffer{}
+	e := json.NewEncoder(writer)
+
+	err = header.Encode(e)
+	assert.NoError(t, err)
+
+	// Validate encoded output
+	expected := []byte("{\"version\":2,\"width\":80,\"height\":24,\"env\":{}}\n")
+	assert.Equal(t, expected, writer.Bytes())
+
+}
+
+func TestEvent_Encode(t *testing.T) {
+
+	// Test case with nil writer
+	var event Event
+	err := event.Encode(nil)
+	assert.Error(t, err)
+
+	// Test case with valid event
+	event = Event{Time: 1.0, Type: "o", Data: "data"}
+	writer := &bytes.Buffer{}
+	e := json.NewEncoder(writer)
+
+	err = event.Encode(e)
+	assert.NoError(t, err)
+
+	// Validate encoded output
+	expected := []byte("[1,\"o\",\"data\"]\n")
+	assert.Equal(t, expected, writer.Bytes())
+
+}

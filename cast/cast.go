@@ -5,10 +5,10 @@
 //
 // From [1], asciicast v2 file is a newline-delimited JSON file where:
 //
-// - first line contains header (initial terminal size, timestamp and other
-//   meta-data), encoded as JSON object; and
-// - all following lines form an event stream, each line representing a separate
-//   event, encoded as 3-element JSON array.
+//   - first line contains header (initial terminal size, timestamp and other
+//     meta-data), encoded as JSON object; and
+//   - all following lines form an event stream, each line representing a separate
+//     event, encoded as 3-element JSON array.
 //
 // [1]: https://github.com/asciinema/asciinema/blob/49a892d9e6f57ab3a774c0835fa563c77cf6a7a7/doc/asciicast-v2.md.
 package cast
@@ -48,22 +48,22 @@ type Header struct {
 	Command string `json:"command,omitempty"`
 
 	// Theme describes the color theme of the recorded terminal.
-	Theme struct {
-		// Fg corresponds to the normal text color (foreground).
-		Fg string `json:"fg,omitempty"`
+	// Theme struct {
+	// 	// Fg corresponds to the normal text color (foreground).
+	// 	Fg string `json:"fg,omitempty"`
 
-		// Bg corresponds to the normal background color.
-		Bg string `json:"bg,omitempty"`
+	// 	// Bg corresponds to the normal background color.
+	// 	Bg string `json:"bg,omitempty"`
 
-		// Palette specifies a list of 8 or 16 colors separated by
-		// colon character to apply a theme to the session
-		Palette string `json:"palette,omitempty"`
-	} `json:"theme,omitempty"`
+	// 	// Palette specifies a list of 8 or 16 colors separated by
+	// 	// colon character to apply a theme to the session
+	// 	Palette string `json:"palette,omitempty"`
+	// } `json:"theme,omitempty"`
 
-	// Title corresponds to the title of the cast.
+	// // Title corresponds to the title of the cast.
 	Title string `json:"title,omitempty"`
 
-	// IdleTimeLimit specifies the maximum amount of idleness between
+	// // IdleTimeLimit specifies the maximum amount of idleness between
 	// one command and another.
 	IdleTimeLimit float64 `json:"idle_time_limit,omitempty"`
 
@@ -88,9 +88,11 @@ type Event struct {
 
 	// Type represents the type of the data that's been recorded.
 	//
-	// Two types are possible:
-	// - "o": data written to stdout; and
-	// - "i": data read from stdin.
+	// Four types are possible:
+	//   - "o": data written to stdout; and
+	//   - "i": data read from stdin.
+	//   - "r": change window size
+	//   - "m": marker
 	Type string
 
 	// Data represents the data recorded from the terminal.
@@ -109,45 +111,49 @@ type Cast struct {
 
 // ValidateHeader verifies whether the provided `cast` header structure is valid
 // or not based on the asciinema cast v2 protocol.
-func ValidateHeader(header *Header) (isValid bool, err error) {
-	if header == nil {
-		err = errors.Errorf("header must not be nil")
-		return
-	}
+func (header *Header) ValidateHeader() error {
 
 	if header.Version != 2 {
-		err = errors.Errorf("only casts with version 2 are valid")
-		return
+		return errors.Errorf("only casts with version 2 are valid")
 	}
 
 	if header.Width == 0 {
-		err = errors.Errorf("a valid width (>0) must be specified")
-		return
+		return errors.Errorf("a valid width (>0) must be specified")
 	}
 
 	if header.Height == 0 {
-		err = errors.Errorf("a valid height (>0) must be specified")
-		return
+		return errors.Errorf("a valid height (>0) must be specified")
 	}
 
-	isValid = true
-	return
+	return nil
+}
+
+func (header *Header) Encode(e *json.Encoder) error {
+	if e == nil {
+		return errors.Errorf("encoder must not be nil")
+	}
+	return e.Encode(header)
 }
 
 // ValidateEvent checks whether the provided `Event` is properly formed.
-func ValidateEvent(event *Event) (isValid bool, err error) {
+func (event *Event) ValidateEvent() error {
 	if event == nil {
-		err = errors.Errorf("event must not be nil")
-		return
+		return errors.Errorf("event must not be nil")
 	}
 
-	if event.Type != "i" && event.Type != "o" {
-		err = errors.Errorf("type must either be `o` or `i`")
-		return
+	switch event.Type {
+	case "i", "o", "r", "m":
+		return nil
+	default:
+		return errors.Errorf("type must either be 'o', 'i', 'r', or 'm'")
 	}
+}
 
-	isValid = true
-	return
+func (ev *Event) Encode(e *json.Encoder) error {
+	if e == nil {
+		return errors.Errorf("encoder must not be nil")
+	}
+	return e.Encode([]interface{}{ev.Time, ev.Type, ev.Data})
 }
 
 // ValidateEventStream makes sure that a given set of events (event stream)
@@ -156,162 +162,137 @@ func ValidateEvent(event *Event) (isValid bool, err error) {
 // A valid stream must:
 // - be ordered by time; and
 // - have valid events.
-func ValidateEventStream(eventStream []*Event) (isValid bool, err error) {
-	var (
-		lastTime float64
-		ev       *Event
-	)
+func ValidateEventStream(eventStream []*Event) error {
+	var lastTime float64
 
-	for _, ev = range eventStream {
+	for _, ev := range eventStream {
 		if ev.Time < lastTime {
-			err = errors.Errorf("events must be ordered by time")
-			return
+			return errors.Errorf("events must be ordered by time")
 		}
 
-		_, err = ValidateEvent(ev)
+		err := ev.ValidateEvent()
 		if err != nil {
-			err = errors.Wrapf(err, "invalid event")
-			return
+			return errors.Wrapf(err, "invalid event")
 		}
 
 		lastTime = ev.Time
 	}
 
-	isValid = true
-	return
+	return nil
 }
 
 // Validate makes sure that the supplied cast is valid.
-func Validate(cast *Cast) (isValid bool, err error) {
-	if cast == nil {
-		err = errors.Errorf("cast must not be nil")
-		return
-	}
-
-	_, err = ValidateHeader(&cast.Header)
+func (cast *Cast) Validate() error {
+	err := cast.Header.ValidateHeader()
 	if err != nil {
-		err = errors.Wrapf(err, "invalid header")
-		return
+		return errors.Wrapf(err, "invalid header")
 	}
 
-	_, err = ValidateEventStream(cast.EventStream)
+	err = ValidateEventStream(cast.EventStream)
 	if err != nil {
-		err = errors.Wrapf(err, "invalid event stream")
-		return
+		return errors.Wrapf(err, "invalid event stream")
 	}
 
-	isValid = true
-	return
+	return nil
 }
 
 // Encode writes the encoding of `Cast` into the writer passed as an argument.
 //
 // ps.: this method **will not** validate whether the cast is a valid V2
 // cast or not. Make sure you call `Validate` before.
-func Encode(writer io.Writer, cast *Cast) (err error) {
+func (cast *Cast) Encode(writer io.Writer) error {
 	if writer == nil {
-		err = errors.Errorf("a writer must be specified")
-		return
+		return errors.New("a writer must be specified")
 	}
 
 	if cast == nil {
-		err = errors.Errorf("a cast must be specified")
-		return
+		return errors.New("a cast must be specified")
 	}
 
 	encoder := json.NewEncoder(writer)
 	encoder.SetIndent("", "")
 
-	err = encoder.Encode(&cast.Header)
-	if err != nil {
-		err = errors.Wrapf(err,
-			"failed to encode header")
-		return
+	if err := cast.Header.Encode(encoder); err != nil {
+		return errors.Wrap(err, "failed to encode header")
 	}
 
 	for _, ev := range cast.EventStream {
-		err = encoder.Encode([]interface{}{ev.Time, ev.Type, ev.Data})
-		if err != nil {
-			err = errors.Wrapf(err,
-				"failed to encode event")
-			return
+		if err := ev.Encode(encoder); err != nil {
+			return errors.Wrap(err, "failed to encode event")
 		}
 	}
 
-	return
+	return nil
 }
 
 // Decode reads the whole contents of the reader passed as argument, validates
 // whether the stream contains a valid asciinema cast and then unmarshals it
 // into a cast struct.
-func Decode(reader io.Reader) (cast *Cast, err error) {
+func Decode(reader io.Reader) (*Cast, error) {
+
+	cast := &Cast{
+		EventStream: make([]*Event, 0),
+		Header: Header{
+			Version: 2,
+		},
+	}
+
 	if reader == nil {
-		err = errors.Errorf("reader must not be nil")
-		return
+		return nil, errors.New("a reader must be specified")
+	}
+
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
+
+	err := decoder.Decode(&cast.Header)
+	if err != nil {
+		return nil, errors.Wrapf(err,
+			"couldn't decode header")
 	}
 
 	var (
-		decoder *json.Decoder
+		ev     = new([3]interface{})
+		ok     bool
+		time   float64
+		evType string
+		data   string
 	)
 
-	cast = new(Cast)
-
-	decoder = json.NewDecoder(reader)
-	decoder.DisallowUnknownFields()
-
-	err = decoder.Decode(&cast.Header)
-	if err != nil {
-		err = errors.Wrapf(err,
-			"couldn't decode header")
-		return
-	}
-
-	cast.EventStream = make([]*Event, 0)
 	for {
-		var (
-			ev     = new([3]interface{})
-			time   float64
-			data   string
-			evType string
-			ok     bool
-		)
-
 		err = decoder.Decode(ev)
 		if err != nil {
 			if err == io.EOF {
-				err = nil
-				return
+				return cast, nil
 			}
 
-			err = errors.Wrapf(err,
+			return nil, errors.Wrapf(err,
 				"failed to parse ev line")
-			return
 		}
 
 		time, ok = ev[0].(float64)
 		if !ok {
-			err = errors.Errorf("first element of event is not a float64")
-			return
+			return nil, errors.Errorf("first element of event is not a float64")
 		}
 
 		evType, ok = ev[1].(string)
 		if !ok {
-			err = errors.Errorf("second element of event is not a string")
-			return
+			return nil, errors.Errorf("second element of event is not a string")
 		}
 
 		data, ok = ev[2].(string)
 		if !ok {
-			err = errors.Errorf("third element of event is not a string")
-			return
+			return nil, errors.Errorf("third element of event is not a string")
 		}
-
-		cast.EventStream = append(cast.EventStream, &Event{
+		ev := &Event{
 			Time: time,
 			Type: evType,
 			Data: data,
-		})
+		}
+		if err = ev.ValidateEvent(); err != nil {
+			return nil, errors.Wrapf(err,
+				"invalid event")
+		}
+		cast.EventStream = append(cast.EventStream, ev)
 	}
 
-	return
 }
