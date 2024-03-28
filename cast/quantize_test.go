@@ -1,123 +1,106 @@
 package cast_test
 
 import (
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/wormbks/asciinema-edit/cast"
 )
 
-var _ = Describe("Quantize", func() {
-	Describe("parameter validation", func() {
+func TestQuantize(t *testing.T) {
+	t.Run("Parameter validation", func(t *testing.T) {
 		var data *cast.Cast
 
-		BeforeEach(func() {
+		setup := func() {
 			data = &cast.Cast{
 				EventStream: []*cast.Event{
 					{},
 				},
 			}
+		}
+
+		t.Run("With nil cast", func(t *testing.T) {
+			setup()
+			err := cast.Quantize(nil, nil)
+			assert.Error(t, err)
 		})
 
-		Context("with nil cast", func() {
-			It("fails", func() {
-				err := cast.Quantize(nil, nil)
-				Expect(err).ToNot(Succeed())
-			})
+		t.Run("With an empty event stream", func(t *testing.T) {
+			setup()
+			err := cast.Quantize(data, nil)
+			assert.Error(t, err)
 		})
 
-		Context("with an empty event stream", func() {
-			JustBeforeEach(func() {
-				data = &cast.Cast{
-					EventStream: []*cast.Event{},
-				}
-			})
-
-			It("fails", func() {
-				err := cast.Quantize(data, nil)
-				Expect(err).ToNot(Succeed())
-			})
+		t.Run("With a nil range list", func(t *testing.T) {
+			setup()
+			err := cast.Quantize(data, nil)
+			assert.Error(t, err)
 		})
 
-		Context("with a nil range list", func() {
-			It("fails", func() {
-				err := cast.Quantize(data, nil)
-				Expect(err).ToNot(Succeed())
-			})
-		})
-
-		Context("with an empty range list", func() {
-			It("fails", func() {
-				err := cast.Quantize(data, []cast.QuantizeRange{})
-				Expect(err).ToNot(Succeed())
-			})
+		t.Run("With an empty range list", func(t *testing.T) {
+			setup()
+			err := cast.Quantize(data, []cast.QuantizeRange{})
+			assert.Error(t, err)
 		})
 	})
 
-	Describe("RangeOverlaps", func() {
-		var qRange *cast.QuantizeRange
+	t.Run("RangeOverlaps", func(t *testing.T) {
+		qRange := &cast.QuantizeRange{
+			From: 1,
+			To:   2,
+		}
 
-		BeforeEach(func() {
-			qRange = &cast.QuantizeRange{
-				From: 1,
-				To:   2,
-			}
-		})
-
-		It("doesnt overlap if no in another range", func() {
-			Expect(qRange.RangeOverlaps(cast.QuantizeRange{
+		t.Run("Doesn't overlap if no in another range", func(t *testing.T) {
+			assert.False(t, qRange.RangeOverlaps(cast.QuantizeRange{
 				From: 30,
 				To:   40,
-			})).ToNot(BeTrue())
+			}))
 		})
 
-		It("overlaps if from in another range", func() {
-			Expect(qRange.RangeOverlaps(cast.QuantizeRange{
+		t.Run("Overlaps if from in another range", func(t *testing.T) {
+			assert.True(t, qRange.RangeOverlaps(cast.QuantizeRange{
 				From: 1.5,
 				To:   3,
-			})).To(BeTrue())
+			}))
 		})
 
-		It("overlaps if to in another range", func() {
-			Expect(qRange.RangeOverlaps(cast.QuantizeRange{
+		t.Run("Overlaps if to in another range", func(t *testing.T) {
+			assert.True(t, qRange.RangeOverlaps(cast.QuantizeRange{
 				From: 0.9,
 				To:   1.5,
-			})).To(BeTrue())
+			}))
 		})
 	})
 
-	Describe("InRange", func() {
-		var qRange *cast.QuantizeRange
+	t.Run("InRange", func(t *testing.T) {
+		qRange := &cast.QuantizeRange{
+			From: 1,
+			To:   2,
+		}
 
-		BeforeEach(func() {
-			qRange = &cast.QuantizeRange{
-				From: 1,
-				To:   2,
-			}
+		t.Run("In range if `from <= x < to`", func(t *testing.T) {
+			assert.True(t, qRange.InRange(1.5))
 		})
 
-		It("in range if `from <= x < to`", func() {
-			Expect(qRange.InRange(1.5)).To(BeTrue())
+		t.Run("In range if `x == from`", func(t *testing.T) {
+			assert.True(t, qRange.InRange(1))
 		})
 
-		It("in range if `x == from`", func() {
-			Expect(qRange.InRange(1)).To(BeTrue())
+		t.Run("Not in range if `x == to`", func(t *testing.T) {
+			assert.False(t, qRange.InRange(2))
 		})
 
-		It("not in range if `x == to`", func() {
-			Expect(qRange.InRange(2)).ToNot(BeTrue())
+		t.Run("Not in range if `x > to`", func(t *testing.T) {
+			assert.False(t, qRange.InRange(2.1))
 		})
 
-		It("not in range if `x > to`", func() {
-			Expect(qRange.InRange(2.1)).ToNot(BeTrue())
-		})
-
-		It("not in range if `x < from`", func() {
-			Expect(qRange.InRange(0.9)).ToNot(BeTrue())
+		t.Run("Not in range if `x < from`", func(t *testing.T) {
+			assert.False(t, qRange.InRange(0.9))
 		})
 	})
 
-	Context("having ranges specified", func() {
+	t.Run("Having ranges specified", func(t *testing.T) {
 		var (
 			data                     *cast.Cast
 			event1, event2, event5   *cast.Event
@@ -125,7 +108,7 @@ var _ = Describe("Quantize", func() {
 			err                      error
 		)
 
-		BeforeEach(func() {
+		setup := func() {
 			event1 = &cast.Event{Time: 1}
 			event2 = &cast.Event{Time: 2}
 			event5 = &cast.Event{Time: 5}
@@ -143,31 +126,20 @@ var _ = Describe("Quantize", func() {
 					event11,
 				},
 			}
-		})
+		}
 
-		Context("cuts down delays with a single range", func() {
-			var ranges []cast.QuantizeRange
+		t.Run("Cuts down delays with a single range", func(t *testing.T) {
+			setup()
+			ranges := []cast.QuantizeRange{{2, 6}}
+			err = cast.Quantize(data, ranges)
+			assert.NoError(t, err)
 
-			JustBeforeEach(func() {
-				ranges = []cast.QuantizeRange{{2, 6}}
-				err = cast.Quantize(data, ranges)
-				Expect(err).To(Succeed())
-			})
-
-			It("modifies the timestamps accordingly", func() {
-				Expect(event1.Time).To(Equal(float64(1)),
-					"first")
-				Expect(event2.Time).To(Equal(float64(2)),
-					"second")
-				Expect(event5.Time).To(Equal(float64(4)),
-					"third")
-				Expect(event9.Time).To(Equal(float64(6)),
-					"fourth")
-				Expect(event10.Time).To(Equal(float64(7)),
-					"fifth")
-				Expect(event11.Time).To(Equal(float64(8)),
-					"sixth")
-			})
+			assert.Equal(t, float64(1), event1.Time)
+			assert.Equal(t, float64(2), event2.Time)
+			assert.Equal(t, float64(4), event5.Time)
+			assert.Equal(t, float64(6), event9.Time)
+			assert.Equal(t, float64(7), event10.Time)
+			assert.Equal(t, float64(8), event11.Time)
 		})
 	})
-})
+}

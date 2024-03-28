@@ -1,118 +1,65 @@
-package commands_test
+package commands
 
 import (
 	"math"
+	"testing"
 
-	"github.com/wormbks/asciinema-edit/cast"
-	"github.com/wormbks/asciinema-edit/cmd/commands"
-
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
 )
 
-var _ = Describe("ParseQuantizeRange", func() {
-	Context("having empty input", func() {
-		var input = ""
-
-		It("fails", func() {
-			_, err := commands.ParseQuantizeRange(input)
-			Expect(err).NotTo(Succeed())
-		})
+func TestParseQuantizeRange(t *testing.T) {
+	t.Run("Empty input", func(t *testing.T) {
+		input := ""
+		_, err := ParseQuantizeRange(input)
+		assert.Error(t, err)
 	})
 
-	Context("having invalid chars", func() {
-		var input string
+	t.Run("Invalid characters", func(t *testing.T) {
+		tests := []struct {
+			name  string
+			input string
+		}{
+			{"Non-decimal characters", "1a"},
+			{"Starts with non-numeric character", "a"},
+			{"Ends with non-numeric character", "1,a"},
+			{"Leading comma", ",1"},
+			{"Trailing comma", "1,"},
+		}
 
-		It("fails if non-decimal", func() {
-			input = "1a"
-			_, err := commands.ParseQuantizeRange(input)
-			Expect(err).NotTo(Succeed())
-		})
-
-		It("fails if starts w/ non-numeric", func() {
-			input = "a"
-			_, err := commands.ParseQuantizeRange(input)
-			Expect(err).NotTo(Succeed())
-		})
-
-		It("fails if ends w/ non-numeric", func() {
-			input = "1,a"
-			_, err := commands.ParseQuantizeRange(input)
-			Expect(err).NotTo(Succeed())
-		})
-
-		It("fails with leading comma", func() {
-			input = ",1"
-			_, err := commands.ParseQuantizeRange(input)
-			Expect(err).NotTo(Succeed())
-		})
-
-		It("fails with trailing comma", func() {
-			input = "1,"
-			_, err := commands.ParseQuantizeRange(input)
-			Expect(err).NotTo(Succeed())
-		})
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				_, err := ParseQuantizeRange(test.input)
+				assert.Error(t, err)
+			})
+		}
 	})
 
-	Context("having a valid entry", func() {
-		var (
-			input  string
-			qRange cast.QuantizeRange
-			err    error
-		)
+	t.Run("Valid Unbounded", func(t *testing.T) {
+		input := "1.2"
+		qRange, err := ParseQuantizeRange(input)
+		assert.NoError(t, err)
+		assert.Equal(t, float64(1.2), qRange.From)
+		assert.Equal(t, math.MaxFloat64, qRange.To)
 
-		Context("that is unbounded", func() {
-			BeforeEach(func() {
-				input = "1.2"
-			})
-
-			JustBeforeEach(func() {
-				qRange, err = commands.ParseQuantizeRange(input)
-			})
-
-			It("succeeds", func() {
-				Expect(err).To(Succeed())
-			})
-
-			It("starts with lower bound", func() {
-				Expect(qRange.From).To(Equal(float64(1.2)))
-			})
-
-			It("ends with the closes to infinit (max float)", func() {
-				Expect(qRange.To).To(Equal(math.MaxFloat64))
-			})
-
-			Context("with negative lower bound", func() {
-				BeforeEach(func() {
-					input = "-1.2"
-				})
-
-				It("fails", func() {
-					Expect(err).ToNot(Succeed())
-				})
-			})
-		})
-
-		Context("that is bounded with `from > to`", func() {
-			BeforeEach(func() {
-				input = "2,1"
-				qRange, err = commands.ParseQuantizeRange(input)
-			})
-
-			It("fails", func() {
-				Expect(err).ToNot(Succeed())
-			})
-		})
-
-		Context("that is bounded with `from == to`", func() {
-			BeforeEach(func() {
-				input = "2,2"
-				qRange, err = commands.ParseQuantizeRange(input)
-			})
-
-			It("fails", func() {
-				Expect(err).ToNot(Succeed())
-			})
-		})
+		input = "-1.2"
+		_, err = ParseQuantizeRange(input)
+		assert.Error(t, err)
 	})
-})
+
+	t.Run("Valid Bounded", func(t *testing.T) {
+		tests := []struct {
+			name  string
+			input string
+		}{
+			{"From greater than to", "2,1"},
+			{"From equal to to", "2,2"},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				_, err := ParseQuantizeRange(test.input)
+				assert.Error(t, err)
+			})
+		}
+	})
+}

@@ -1,180 +1,185 @@
-package transformer_test
+package transformer
 
 import (
 	"io/ioutil"
 	"os"
 	"path"
+	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/wormbks/asciinema-edit/cast"
-	"github.com/wormbks/asciinema-edit/cmd/commands/transformer"
-
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 )
 
 type DummyTransformation struct{}
 
-func (t *DummyTransformation) Transform(c *cast.Cast) (err error) {
-	return
+func (t *DummyTransformation) Transform(c *cast.Cast) error {
+	return nil
 }
 
-var _ = Describe("Transformer", func() {
-	Describe("New", func() {
-		Context("with nil transform", func() {
-			It("fails", func() {
-				_, err := transformer.New(nil, "", "")
-				Expect(err).ToNot(Succeed())
+func TestTransformer(t *testing.T) {
+
+	t.Run("with nil transform", func(t *testing.T) {
+		_, err := New(nil, "", "")
+		assert.Error(t, err)
+	})
+
+	t.Run("with transformation", func(t *testing.T) {
+		var (
+			transformation Transformation
+			tempDir        string
+			err            error
+		)
+
+		setup := func() {
+			transformation = &DummyTransformation{}
+			tempDir, err = ioutil.TempDir("", "")
+			assert.NoError(t, err)
+		}
+
+		teardown := func() {
+			os.RemoveAll(tempDir)
+		}
+
+		t.Run("having empty input and output", func(t *testing.T) {
+			setup()
+			defer teardown()
+
+			_, err := New(transformation, "", "")
+			assert.NoError(t, err)
+		})
+
+		t.Run("with input specified", func(t *testing.T) {
+			var input string
+
+			t.Run("fails if it doesn't exist", func(t *testing.T) {
+				setup()
+				defer teardown()
+
+				input = path.Join(tempDir, "inexistent")
+
+				_, err := New(transformation, input, "")
+				assert.Error(t, err)
+			})
+
+			t.Run("fails if is a directory", func(t *testing.T) {
+				setup()
+				defer teardown()
+
+				input = tempDir
+				_, err := New(transformation, input, "")
+				assert.Error(t, err)
+			})
+
+			t.Run("succeeds if file exists", func(t *testing.T) {
+				setup()
+				defer teardown()
+
+				inputFile, err := ioutil.TempFile(tempDir, "")
+				assert.NoError(t, err)
+
+				input = inputFile.Name()
+
+				_, err = New(transformation,
+					inputFile.Name(), "")
+				assert.NoError(t, err)
 			})
 		})
 
-		Context("with transformation", func() {
-			var (
-				transformation transformer.Transformation
-				tempDir        string
-				err            error
-			)
+		t.Run("with output specified", func(t *testing.T) {
+			var output string
 
-			BeforeEach(func() {
-				transformation = &DummyTransformation{}
-				tempDir, err = ioutil.TempDir("", "")
-				Expect(err).To(Succeed())
+			t.Run("fails if directory doesn't exist", func(t *testing.T) {
+				setup()
+				defer teardown()
+
+				output = "/inexistent/directory/file.txt"
+
+				_, err = New(transformation, "", output)
+				assert.Error(t, err)
 			})
 
-			AfterEach(func() {
-				os.RemoveAll(tempDir)
+			t.Run("creates file if it doesn't exist in existing directory", func(t *testing.T) {
+				setup()
+				defer teardown()
+
+				output = path.Join(tempDir, "output-file")
+
+				_, err = New(transformation, "", output)
+				assert.NoError(t, err)
+
+				_, err = os.Stat(output)
+				assert.NoError(t, err)
 			})
 
-			Context("having empty input and output", func() {
-				It("succeeds", func() {
-					_, err = transformer.New(transformation, "", "")
-					Expect(err).To(Succeed())
-				})
-			})
+			t.Run("succeeds if file exists", func(t *testing.T) {
+				setup()
+				defer teardown()
 
-			Context("with input specified", func() {
-				var input string
+				outputFile, err := ioutil.TempFile(tempDir, "")
+				assert.NoError(t, err)
 
-				It("fails if it doesnt exist", func() {
-					input = path.Join(tempDir, "inexistent")
+				output = outputFile.Name()
 
-					_, err = transformer.New(transformation, input, "")
-					Expect(err).ToNot(Succeed())
-				})
-
-				It("fails if is a directory", func() {
-					input = tempDir
-					_, err = transformer.New(transformation, input, "")
-					Expect(err).ToNot(Succeed())
-				})
-
-				It("succeeds if file exists", func() {
-					inputFile, err := ioutil.TempFile(tempDir, "")
-					Expect(err).To(Succeed())
-
-					input = inputFile.Name()
-
-					_, err = transformer.New(transformation,
-						inputFile.Name(), "")
-					Expect(err).To(Succeed())
-				})
-			})
-
-			Context("with output specified", func() {
-				var output string
-
-				It("fails if directory doesnt exist", func() {
-					output = "/inexistent/directory/file.txt"
-
-					_, err = transformer.New(transformation, "", output)
-					Expect(err).ToNot(Succeed())
-				})
-
-				It("creates file if it doesnt exist in existing directory", func() {
-					output = path.Join(tempDir, "output-file")
-
-					_, err = transformer.New(transformation, "", output)
-					Expect(err).To(Succeed())
-
-					_, err = os.Stat(output)
-					Expect(err).To(Succeed())
-				})
-
-				It("succeeds if file exists", func() {
-					outputFile, err := ioutil.TempFile(tempDir, "")
-					Expect(err).To(Succeed())
-
-					output = outputFile.Name()
-
-					_, err = transformer.New(transformation, "", output)
-					Expect(err).To(Succeed())
-				})
+				_, err = New(transformation, "", output)
+				assert.NoError(t, err)
 			})
 		})
 	})
 
-	Describe("transform", func() {
+	t.Run("transform", func(t *testing.T) {
 		var (
-			trans  *transformer.Transformer
+			trans  *Transformer
 			input  string
 			output = "/dev/null"
 			err    error
 		)
 
-		JustBeforeEach(func() {
-			trans, err = transformer.New(
+		setup := func(content string) {
+			input, err = createTempFileWithContent(content)
+			assert.NoError(t, err)
+
+			trans, err = New(
 				&DummyTransformation{},
 				input,
 				output)
-			Expect(err).To(Succeed())
-		})
+			assert.NoError(t, err)
+		}
 
-		AfterEach(func() {
+		teardown := func() {
 			os.Remove(input)
+		}
+
+		t.Run("with malformed input", func(t *testing.T) {
+			setup("malformed")
+			defer teardown()
+
+			err = trans.Transform()
+			assert.Error(t, err)
 		})
 
-		Context("with malformed input", func() {
-			BeforeEach(func() {
-				input, err = createTempFileWithContent("malformed")
-				Expect(err).To(Succeed())
-			})
-
-			It("fails", func() {
-				err = trans.Transform()
-				Expect(err).ToNot(Succeed())
-			})
-		})
-
-		Context("with malformed event stream", func() {
-			BeforeEach(func() {
-				input, err = createTempFileWithContent(`{"version": 2, "width": 123, "height": 123}
+		t.Run("with malformed event stream", func(t *testing.T) {
+			setup(`{"version": 2, "width": 123, "height": 123}
 [1, "o", "aaa"]
 [3, "o", "ccc"]
 [2, "o", "bbb"]`)
-				Expect(err).To(Succeed())
-			})
+			defer teardown()
 
-			It("fails", func() {
-				err = trans.Transform()
-				Expect(err).ToNot(Succeed())
-			})
+			err = trans.Transform()
+			assert.Error(t, err)
 		})
 
-		Context("with well formed event stream", func() {
-			BeforeEach(func() {
-				input, err = createTempFileWithContent(`{"version": 2, "width": 123, "height": 123}
+		t.Run("with well formed event stream", func(t *testing.T) {
+			setup(`{"version": 2, "width": 123, "height": 123}
 [1, "o", "aaa"]
 [2, "o", "bbb"]
 [3, "o", "ccc"]`)
-				Expect(err).To(Succeed())
-			})
+			defer teardown()
 
-			It("succeeds", func() {
-				err = trans.Transform()
-				Expect(err).To(Succeed())
-			})
+			err = trans.Transform()
+			assert.NoError(t, err)
 		})
 	})
-})
+}
 
 func createTempFileWithContent(content string) (res string, err error) {
 	var file *os.File

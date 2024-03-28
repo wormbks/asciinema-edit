@@ -1,42 +1,36 @@
 package cast_test
 
 import (
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/wormbks/asciinema-edit/cast"
 )
 
-var _ = Describe("Cut", func() {
-	Describe("parameter validation", func() {
-		var data = &cast.Cast{
-			EventStream: []*cast.Event{},
-		}
+func TestCut_Validation(t *testing.T) {
+	data := &cast.Cast{
+		EventStream: []*cast.Event{},
+	}
 
-		Context("with nil cast", func() {
-			It("fails", func() {
-				err := cast.Cut(nil, 1, 2)
-				Expect(err).ToNot(Succeed())
-			})
-		})
-
-		Context("with an empty event stream", func() {
-
-			It("errors", func() {
-				err := cast.Cut(data, 1, 2)
-				Expect(err).ToNot(Succeed())
-			})
-		})
-
-		Context("with `from` > `to`", func() {
-			It("fails", func() {
-				err := cast.Cut(data, 3, 2)
-				Expect(err).ToNot(Succeed())
-			})
-		})
+	t.Run("With nil cast", func(t *testing.T) {
+		err := cast.Cut(nil, 1, 2)
+		assert.Error(t, err)
 	})
 
-	Context("with non-empty event stream", func() {
+	t.Run("With an empty event stream", func(t *testing.T) {
+		err := cast.Cut(data, 1, 2)
+		assert.Error(t, err)
+	})
+
+	t.Run("With `from` > `to`", func(t *testing.T) {
+		err := cast.Cut(data, 3, 2)
+		assert.Error(t, err)
+	})
+}
+
+func TestCut_Stream(t *testing.T) {
+	t.Run("With non-empty event stream", func(t *testing.T) {
 		var (
 			err                                error
 			data                               *cast.Cast
@@ -44,7 +38,7 @@ var _ = Describe("Cut", func() {
 			event1, event1_2, event1_6, event2 *cast.Event
 		)
 
-		BeforeEach(func() {
+		setup := func() {
 			event1 = &cast.Event{
 				Time: 1,
 				Data: "event1",
@@ -72,78 +66,64 @@ var _ = Describe("Cut", func() {
 			}
 
 			initialNumberOfEvents = len(data.EventStream)
+		}
+
+		t.Run("With `from` not found", func(t *testing.T) {
+			setup()
+			err = cast.Cut(data, 1.1, 2)
+			assert.Error(t, err)
 		})
 
-		Context("with `from` not found", func() {
-			It("fails", func() {
-				err = cast.Cut(data, 1.1, 2)
-				Expect(err).ToNot(Succeed())
-			})
+		t.Run("With `to` not found", func(t *testing.T) {
+			setup()
+			err = cast.Cut(data, 2, 3.3)
+			assert.Error(t, err)
 		})
 
-		Context("with `to` not found", func() {
-			It("fails", func() {
-				err = cast.Cut(data, 2, 3.3)
-				Expect(err).ToNot(Succeed())
-			})
+		t.Run("Cutting a single frame when `from` == `to`", func(t *testing.T) {
+			setup()
+			err = cast.Cut(data, 1.2, 1.2)
+			assert.NoError(t, err)
+
+			assert.Contains(t, data.EventStream, event1)
+			assert.NotContains(t, data.EventStream, event1_2)
+			assert.Contains(t, data.EventStream, event1_6)
+			assert.Contains(t, data.EventStream, event2)
+
+			assert.Len(t, data.EventStream, initialNumberOfEvents-1)
+
+			assert.Equal(t, float64(1), event1.Time)
+			assert.Equal(t, float64(1.2), event1_6.Time)
+			assert.Equal(t, float64(1.6), event2.Time)
 		})
 
-		Context("cutting a single frame when `from` == `to`", func() {
-			JustBeforeEach(func() {
-				err = cast.Cut(data, 1.2, 1.2)
-				Expect(err).To(Succeed())
-			})
+		t.Run("Cutting range without bounds included", func(t *testing.T) {
+			setup()
+			err = cast.Cut(data, 1.2, 1.6)
+			assert.NoError(t, err)
 
-			It("removes the frame", func() {
-				Expect(data.EventStream).To(ContainElement(event1))
-				Expect(data.EventStream).ToNot(ContainElement(event1_2))
-				Expect(data.EventStream).To(ContainElement(event1_6))
-				Expect(data.EventStream).To(ContainElement(event2))
+			assert.Contains(t, data.EventStream, event1)
+			assert.NotContains(t, data.EventStream, event1_2)
+			assert.NotContains(t, data.EventStream, event1_6)
+			assert.Contains(t, data.EventStream, event2)
 
-				Expect(len(data.EventStream)).
-					To(Equal(initialNumberOfEvents - 1))
-			})
+			assert.Len(t, data.EventStream, initialNumberOfEvents-2)
 
-			It("adjusts the remaining time stamps", func() {
-				Expect(event1.Time).To(Equal(float64(1)))
-				Expect(event1_6.Time).To(Equal(float64(1.2)))
-				Expect(event2.Time).To(Equal(float64(1.6)))
-			})
+			assert.Equal(t, float64(1), event1.Time)
+			assert.Equal(t, float64(1.2), event2.Time)
 		})
 
-		Context("cutting range without bounds included", func() {
-			JustBeforeEach(func() {
-				err = cast.Cut(data, 1.2, 1.6)
-				Expect(err).To(Succeed())
-			})
-
-			It("removes the frame", func() {
-				Expect(data.EventStream).To(ContainElement(event1))
-				Expect(data.EventStream).ToNot(ContainElement(event1_2))
-				Expect(data.EventStream).ToNot(ContainElement(event1_6))
-				Expect(data.EventStream).To(ContainElement(event2))
-
-				Expect(len(data.EventStream)).
-					To(Equal(initialNumberOfEvents - 2))
-			})
-
-			It("adjusts the remaining time stamps", func() {
-				Expect(event1.Time).To(Equal(float64(1)))
-				Expect(event2.Time).To(Equal(float64(1.2)))
-			})
-		})
-
-		It("cuts frames in range containing last element", func() {
+		t.Run("Cuts frames in range containing last element", func(t *testing.T) {
+			setup()
 			err = cast.Cut(data, 1.2, 2)
-			Expect(err).To(Succeed())
+			assert.NoError(t, err)
 
-			Expect(data.EventStream).To(ContainElement(event1))
-			Expect(data.EventStream).ToNot(ContainElement(event1_2))
-			Expect(data.EventStream).ToNot(ContainElement(event1_6))
-			Expect(data.EventStream).ToNot(ContainElement(event2))
+			assert.Contains(t, data.EventStream, event1)
+			assert.NotContains(t, data.EventStream, event1_2)
+			assert.NotContains(t, data.EventStream, event1_6)
+			assert.NotContains(t, data.EventStream, event2)
 
-			Expect(len(data.EventStream)).
-				To(Equal(initialNumberOfEvents - 3))
+			assert.Len(t, data.EventStream, initialNumberOfEvents-3)
 		})
 	})
-})
+}
